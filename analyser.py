@@ -76,7 +76,7 @@ class GraphModel(Model):
 
 
 class State(object):
-    def __init__(self, accepting, transitions):
+    def __init__(self, accepting, *transitions):
         self.accepting = accepting
         self.transitions = transitions
 
