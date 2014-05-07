@@ -24,7 +24,7 @@ class LogEventInterface(object):
 
 #INTERFACE
 class Model(object):
-    def add_obj(self, obj_id):
+    def add_obj(self, obj_id, queries):
         raise NotImplementedError()
     def add_stack_ref(self, referrer_id, referee_id):
         raise NotImplementedError()
@@ -37,6 +37,8 @@ class Model(object):
     def remove_heap_ref(self, referrer_id, referee_id):
         raise NotImplementedError()
     def get_obj_ids(self):
+        raise NotImplementedError()
+    def get_obj_queries(self, obj_id):
         raise NotImplementedError()
     def count_stack_refs(self, obj_id):
         raise NotImplementedError()
@@ -76,8 +78,10 @@ class GraphModel(Model):
 
 
 class State(object):
-    def __init__(self, accepting, *transitions):
+    def __init__(self, accepting):
         self.accepting = accepting
+        self.transitions = transitions
+    def set_transitions(transitions):
         self.transitions = transitions
 
 
@@ -87,56 +91,62 @@ class Transition(object):
         raise NotImplementedError()
 
 
-#IMPLEMENTATION
-class InDegree(Transition):
-    def __init__(self, target_state, comp_func, comp_val):
-        self.comp_func = comp_func
-        self.comp_val = comp_val
+class Whatever(Transition):
+    def __init__(self, target_state):
         self.target_state = target_state
     def apply(self, model, obj_id):
+        return True
+
+
+#FURTHER GENERALIZATIONS IN THE FUTURE
+#THE USER PROVIDES THE FUNCTION, ONE-ARGUMENT FUNCTION
+#IMPLEMENTATION
+class InDegree(Transition):
+    def __init__(self, target_state, comp_func):
+        self.target_state = target_state
+        self.comp_func = comp_func
+    def apply(self, model, obj_id):
         return self.comp_func(self.model.count_stack_refs(obj_id) + 
-                              self.model.count_heap_refs(obj_id), 
-                              self.comp_val)
+                              self.model.count_heap_refs(obj_id))
 
 
 #IMPLEMENTATION
 class StackInDegree(Transition):
-    def __init__(self, target_state, comp_func, comp_val):
-        self.comp_func = comp_func
-        self.comp_val = comp_val
+    def __init__(self, target_state, comp_func):
         self.target_state = target_state
+        self.comp_func = comp_func
     def apply(self, model, obj_id):
-        return self.comp_func(self.model.count_stack_refs(obj_id), 
-                              self.comp_val)
+        return self.comp_func(self.model.count_stack_refs(obj_id))
 
 
 #IMPLEMENTATION
 class HeapInDegree(Transition):
-    def __init__(self, target_state, comp_func, comp_val):
+    def __init__(self, target_state, comp_func):
+        self.target_state = target_state
         self.comp_func = comp_func
-        self.comp_val = comp_val
-        self.target_state = target_state
     def apply(self, model, obj_id):
-        return self.comp_func(self.model.count_heap_refs(obj_id), 
-                              self.comp_val)
+        return self.comp_func(self.model.count_heap_refs(obj_id))
 
 
-#IMPLEMENTATION
-class Unique(Transition):
-    def __init__(self, target_state):
-        self.target_state = target_state
-    def apply(self, model, obj_id):
-        return InDegree(operator.le, 1).apply(model, obj_id)
+class QueryFactory(object):
+    def __init__(self, produce_function):
+        self.produce_function = produce_function
+    def produce(self):
+        return self.produce_function()
 
 
-#IS THIS A GOOD IMPLEMENTATION OF A QUERY?
+#THIS WORKS BASED ON THE ASSUMPTION THAT
+#TRANSITIONS' APPLY METHODS ARE BOOLEAN
+#FUNCTIONS
 class Query(object):
-    def __init__(self, states):
-        self.current_state = states[0]
+    def __init__(self, start_state):
+        self.current_state = start_state
         self.failure = False
+    def in_accepting_state(self):
+        return self.current_state.accepting
     def apply(self, model, obj):
+        transition_found = False
         for t in self.current_state.transitions:
-            transition_found = False
             if t.apply(model, obj):
                 self.current_state = t.target_state
                 transition_found = True
@@ -156,9 +166,9 @@ def parse():
 
 
 #TODO: adjust after abstract event format
-def process(model, event, queries):
+def process(model, event, query_factories):
     if event[0] == Opcodes.ALLOC:
-        model.add_obj(event[1])
+        model.add_obj(event[1], [qf.produce() for qf in query_factories])
     elif event[0] == Opcodes.FLOAD:
         pass
     elif event[0] == Opcodes.FSTORE:
@@ -167,6 +177,10 @@ def process(model, event, queries):
     elif event[0] == Opcodes.MCALL:
         pass
     elif event[0] == Opcodes.DEALLOC:
+        obj_queries = model.get_obj_queries(event[1])
+        for query in obj_queries:
+            if query.in_accepting_state():
+                #WHAT DO WE DO WITH SUCCESSFUL QUERIES???
         model.remove_obj(event[1])
     elif event[0] == Opcodes.MEXIT:
         pass
@@ -177,16 +191,36 @@ def process(model, event, queries):
         raise Exception("OPCODE " + event[0] + " NOT RECOGNISED")
         
 
-#WHEN OBJECT IS DEALLOCATED, NEED TO SIGNAL QUERY 
-#END OF INPUT, TO CHECK IF IN ACCEPTING STATE
-def execute(model, logevents, queries):
+def execute(model, logevents, query_factories):
     for event in logevents:
-        process(model, event)
-        #APPLY ALL QUERIES TO ALL OBJECTS?
-        #IF SO, DOES EACH OBJECT NEED ITS OWN STATE/SET OF QUERIES?
+        process(model, event, query_factories)
+        #THIS FEELS MESSED UP, DIRECT REFERENCE TO QUERY AND LOUSY 
+        #TIME COMPLEXITY IF WE HAVE TO RUN THIS FOR EVERY LOGEVENT
         for obj_id in model.get_obj_ids():
-            ...
+            obj_queries = model.get_obj_queries(obj_id)
+            for query in obj_queries:
+                if query.failure:
+                    model.remove_query(obj_id, query)
 
+
+def first_unique_then_aliased_query_function():
+    s1 = State(False)
+    s2 = State(True)
+
+    t1 = InDegree(s1, lambda x: x <= 1)
+    t2 = InDegree(s2, lambda x: x > 1)
+    t3 = Whatever(s2)
+
+    s1.set_transitions([t1, t2])
+    s2.set_transitions([t3])
+
+    return Query(s1)
+
+
+#KEEPING A DICTIONARY OF THE OBJECTS WHERE THE VALUES ARE COLLECTIONS OF QUERIES 
+#IS NOT VIABLE IF WE ARE NOT RUNNING THE QUERIES IN TERMS OF OBJECTS, BUT RATHER 
+#THE WHOLE MODEL, EG HOW MANY WAYS CAN WE TRAVEL THE GRAPH TO GET FROM A POSITION 
+#TO ANOTHER?
 def main():
     #Parse the events
     #TODO: fix parsed event format, abstraction
@@ -196,14 +230,12 @@ def main():
     #DEBUG
     #sys.stdin = open("/dev/tty", "r")
 
-    #Create model and queries
+    #Create model and query factories
     gm = Graph_Model()
-    s1 = State( False, InDegree(0, operator.le, 1), InDegree(1, operator.gt, 1) )
-    s2 = State( True, InDegree(1, operator.gt, 1) )
-    queries = [Query(s1, s2)]
+    query_factories = [QueryFactory(first_unique_then_aliased_query_function)]
 
     #Exeute everything
-    execute(gm, logevents, queries)
+    execute(gm, logevents, query_factories)
 
     print "FINISHED"
 
