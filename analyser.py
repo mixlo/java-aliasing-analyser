@@ -106,8 +106,8 @@ class InDegree(Transition):
         self.target_state = target_state
         self.comp_func = comp_func
     def apply(self, model, obj_id):
-        return self.comp_func(self.model.count_stack_refs(obj_id) + 
-                              self.model.count_heap_refs(obj_id))
+        return self.comp_func(model.count_stack_refs(obj_id) + 
+                              model.count_heap_refs(obj_id))
 
 
 #IMPLEMENTATION
@@ -116,7 +116,7 @@ class StackInDegree(Transition):
         self.target_state = target_state
         self.comp_func = comp_func
     def apply(self, model, obj_id):
-        return self.comp_func(self.model.count_stack_refs(obj_id))
+        return self.comp_func(model.count_stack_refs(obj_id))
 
 
 #IMPLEMENTATION
@@ -125,7 +125,7 @@ class HeapInDegree(Transition):
         self.target_state = target_state
         self.comp_func = comp_func
     def apply(self, model, obj_id):
-        return self.comp_func(self.model.count_heap_refs(obj_id))
+        return self.comp_func(model.count_heap_refs(obj_id))
 
 
 class QueryFactory(object):
@@ -181,6 +181,8 @@ def process(model, event, query_factories):
         for query in obj_queries:
             if query.in_accepting_state():
                 #WHAT DO WE DO WITH SUCCESSFUL QUERIES???
+                #A COUNTER FOR EACH FACTORY, COUNTING 
+                #THE SUCCESFFUL QUERIES
         model.remove_obj(event[1])
     elif event[0] == Opcodes.MEXIT:
         pass
@@ -188,7 +190,7 @@ def process(model, event, query_factories):
         model.add_stack_ref(event[3], event[1])
         model.remove_stack_ref(event[3], event[2])
     else:
-        raise Exception("OPCODE " + event[0] + " NOT RECOGNISED")
+        raise Exception("OPCODE {0} NOT RECOGNISED".format(event[0]))
         
 
 def execute(model, logevents, query_factories):
@@ -198,6 +200,7 @@ def execute(model, logevents, query_factories):
         #TIME COMPLEXITY IF WE HAVE TO RUN THIS FOR EVERY LOGEVENT
         for obj_id in model.get_obj_ids():
             obj_queries = model.get_obj_queries(obj_id)
+            #CONSIDER FILTERING
             for query in obj_queries:
                 if query.failure:
                     model.remove_query(obj_id, query)
@@ -220,7 +223,8 @@ def first_unique_then_aliased_query_function():
 #KEEPING A DICTIONARY OF THE OBJECTS WHERE THE VALUES ARE COLLECTIONS OF QUERIES 
 #IS NOT VIABLE IF WE ARE NOT RUNNING THE QUERIES IN TERMS OF OBJECTS, BUT RATHER 
 #THE WHOLE MODEL, EG HOW MANY WAYS CAN WE TRAVEL THE GRAPH TO GET FROM A POSITION 
-#TO ANOTHER?
+#TO ANOTHER? THAT IS, WE MIGHT WANT TO APPLY QUERIES THAT DOES NOT ONLY CONCERN 
+#A SINGLE SPECIFIC OBJECT.
 def main():
     #Parse the events
     #TODO: fix parsed event format, abstraction
@@ -232,7 +236,7 @@ def main():
 
     #Create model and query factories
     gm = Graph_Model()
-    query_factories = [QueryFactory(first_unique_then_aliased_query_function)]
+    query_factories = {QueryFactory(first_unique_then_aliased_query_function)}
 
     #Exeute everything
     execute(gm, logevents, query_factories)
