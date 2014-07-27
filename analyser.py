@@ -77,84 +77,6 @@ class GraphModel(Model):
         pass
 
 
-class State(object):
-    def __init__(self, accepting):
-        self.accepting = accepting
-        self.transitions = transitions
-    def set_transitions(transitions):
-        self.transitions = transitions
-
-
-#INTERFACE
-class Transition(object):
-    def apply(self, model, obj):
-        raise NotImplementedError()
-
-
-class Whatever(Transition):
-    def __init__(self, target_state):
-        self.target_state = target_state
-    def apply(self, model, obj_id):
-        return True
-
-
-#FURTHER GENERALIZATIONS IN THE FUTURE
-#THE USER PROVIDES THE FUNCTION, ONE-ARGUMENT FUNCTION
-#IMPLEMENTATION
-class InDegree(Transition):
-    def __init__(self, target_state, comp_func):
-        self.target_state = target_state
-        self.comp_func = comp_func
-    def apply(self, model, obj_id):
-        return self.comp_func(model.count_stack_refs(obj_id) + 
-                              model.count_heap_refs(obj_id))
-
-
-#IMPLEMENTATION
-class StackInDegree(Transition):
-    def __init__(self, target_state, comp_func):
-        self.target_state = target_state
-        self.comp_func = comp_func
-    def apply(self, model, obj_id):
-        return self.comp_func(model.count_stack_refs(obj_id))
-
-
-#IMPLEMENTATION
-class HeapInDegree(Transition):
-    def __init__(self, target_state, comp_func):
-        self.target_state = target_state
-        self.comp_func = comp_func
-    def apply(self, model, obj_id):
-        return self.comp_func(model.count_heap_refs(obj_id))
-
-
-class QueryFactory(object):
-    def __init__(self, produce_function):
-        self.produce_function = produce_function
-    def produce(self):
-        return self.produce_function()
-
-
-#THIS WORKS BASED ON THE ASSUMPTION THAT
-#TRANSITIONS' APPLY METHODS ARE BOOLEAN
-#FUNCTIONS
-class Query(object):
-    def __init__(self, start_state):
-        self.current_state = start_state
-        self.failure = False
-    def in_accepting_state(self):
-        return self.current_state.accepting
-    def apply(self, model, obj):
-        transition_found = False
-        for t in self.current_state.transitions:
-            if t.apply(model, obj):
-                self.current_state = t.target_state
-                transition_found = True
-                break
-        if not transition_found:
-            self.failure = True
-
-
 #TODO: abstract event format
 def parse():
     lines = []
@@ -201,30 +123,18 @@ def execute(model, logevents, query_factories):
         for obj_id in model.get_obj_ids():
             obj_queries = model.get_obj_queries(obj_id)
             #CONSIDER FILTERING
+            map(lambda q: model.remove_query(obj_id, q) if q.failure else pass,
+                obj_queries)
             for query in obj_queries:
                 if query.failure:
                     model.remove_query(obj_id, query)
 
 
-def first_unique_then_aliased_query_function():
-    s1 = State(False)
-    s2 = State(True)
-
-    t1 = InDegree(s1, lambda x: x <= 1)
-    t2 = InDegree(s2, lambda x: x > 1)
-    t3 = Whatever(s2)
-
-    s1.set_transitions([t1, t2])
-    s2.set_transitions([t3])
-
-    return Query(s1)
-
-
-#KEEPING A DICTIONARY OF THE OBJECTS WHERE THE VALUES ARE COLLECTIONS OF QUERIES 
-#IS NOT VIABLE IF WE ARE NOT RUNNING THE QUERIES IN TERMS OF OBJECTS, BUT RATHER 
-#THE WHOLE MODEL, EG HOW MANY WAYS CAN WE TRAVEL THE GRAPH TO GET FROM A POSITION 
-#TO ANOTHER? THAT IS, WE MIGHT WANT TO APPLY QUERIES THAT DOES NOT ONLY CONCERN 
-#A SINGLE SPECIFIC OBJECT.
+#KEEPING A DICTIONARY OF THE OBJECTS WHERE THE VALUES ARE COLLECTIONS OF 
+#QUERIES IS NOT VIABLE IF WE ARE NOT RUNNING THE QUERIES IN TERMS OF 
+#OBJECTS, BUT RATHER THE WHOLE MODEL, EG HOW MANY WAYS CAN WE TRAVEL THE 
+#GRAPH TO GET FROM A POSITION TO ANOTHER? THAT IS, WE MIGHT WANT TO 
+#APPLY QUERIES THAT DOES NOT ONLY CONCERN A SINGLE SPECIFIC OBJECT.
 def main():
     #Parse the events
     #TODO: fix parsed event format, abstraction

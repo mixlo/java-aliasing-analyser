@@ -43,3 +43,104 @@ def create_graph(logevent_list):
         #    print n, graph.node[n]
         #raw_input()
     return graph
+
+
+
+#THIS WORKS BASED ON THE ASSUMPTION THAT
+#TRANSITIONS' APPLY METHODS ARE BOOLEAN
+#FUNCTIONS
+class Query(object):
+    def __init__(self, start_state):
+        self.current_state = start_state
+        self.failure = False
+    def in_accepting_state(self):
+        return self.current_state.accepting
+    def apply(self, model, obj):
+        transition_found = False
+        for t in self.current_state.transitions:
+            if t.apply(model, obj):
+                self.current_state = t.target_state
+                transition_found = True
+                break
+        if not transition_found:
+            self.failure = True
+
+
+
+class State(object):
+    def __init__(self, accepting):
+        self.accepting = accepting
+        self.transitions = transitions
+    def set_transitions(transitions):
+        self.transitions = transitions
+
+
+
+#INTERFACE
+class Transition(object):
+    def apply(self, model, obj):
+        raise NotImplementedError()
+
+
+
+class Whatever(Transition):
+    def __init__(self, target_state):
+        self.target_state = target_state
+    def apply(self, model, obj_id):
+        return True
+
+
+
+#FURTHER GENERALIZATIONS IN THE FUTURE
+#THE USER PROVIDES THE FUNCTION, ONE-ARGUMENT FUNCTION
+#IMPLEMENTATION
+class InDegree(Transition):
+    def __init__(self, target_state, comp_func):
+        self.target_state = target_state
+        self.comp_func = comp_func
+    def apply(self, model, obj_id):
+        return self.comp_func(model.count_stack_refs(obj_id) + 
+                              model.count_heap_refs(obj_id))
+
+
+
+#IMPLEMENTATION
+class StackInDegree(Transition):
+    def __init__(self, target_state, comp_func):
+        self.target_state = target_state
+        self.comp_func = comp_func
+    def apply(self, model, obj_id):
+        return self.comp_func(model.count_stack_refs(obj_id))
+
+
+
+#IMPLEMENTATION
+class HeapInDegree(Transition):
+    def __init__(self, target_state, comp_func):
+        self.target_state = target_state
+        self.comp_func = comp_func
+    def apply(self, model, obj_id):
+        return self.comp_func(model.count_heap_refs(obj_id))
+
+
+
+class QueryFactory(object):
+    def __init__(self, produce_function):
+        self.produce_function = produce_function
+    def produce(self):
+        return self.produce_function()
+
+
+
+def first_unique_then_aliased_query_function():
+    s1 = State(False)
+    s2 = State(True)
+
+    t1 = InDegree(s1, lambda x: x <= 1)
+    t2 = InDegree(s2, lambda x: x > 1)
+    t3 = Whatever(s2)
+
+    s1.set_transitions([t1, t2])
+    s2.set_transitions([t3])
+
+    return Query(s1)
