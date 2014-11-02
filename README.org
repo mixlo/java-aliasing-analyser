@@ -9,7 +9,6 @@ except primitive fields or if something else is stated.
 Field stores/loads of primitive type are traced,
 but not the values.
 
-
 ** OPCODE
 The first character in every line is
 a number that describes what type of
@@ -61,7 +60,7 @@ The method call event is formed as:
 
 where:
 X = string = method name
-Z = STRING/LONG = CALLER (the caller of the method, - for main method)
+Z = STRING/LONG = CALLER (the caller of the method, "-" for main method)
 A = STRING/LONG = CALLEE (the class containing the method)
 K = LONG* = space separated tags that identifies
             the arguments passed to this method
@@ -79,8 +78,8 @@ The method exit event is formed as:
 where:
 X = string = method name
 Y = long = returned obj's tag or 0
-Z = STRING/LONG = CALLER
-A = STRING/LONG = CALLEE
+Z = STRING/LONG = CALLER (the caller of the method, "-" for main method)
+A = STRING/LONG = CALLEE (the class containing the method)
 K = LONG* = space separated tags that identifies
             the object that goes out of scope after
 	    this event

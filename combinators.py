@@ -7,8 +7,11 @@ class Query(object):
         raise NotImplementedError()
     def clone(self):
         raise NotImplementedError()
+    def message(self):
+        raise NotImplementedError()
 
 
+#TOSTRING METHOD?
 class Observe(Query):
     def __init__(self, tst):
         self.tst = tst

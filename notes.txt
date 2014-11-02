@@ -1,0 +1,76 @@
+PRIMITIVE TYPES, OBJECTS AND STRING
+
+ints
+Passed as parameter: Not seen
+Goes out of scope: Not seen
+Defined inside method: Not seen
+Defined as field: Not seen
+Defined as static field: Event 3, as a reference from Main to 0
+
+Integer objects
+Passed as parameter: Event 4 as parameter
+Goes out of scope: Event 6 as going out of scope
+Defined inside method: Event 1 to allocate object, Event 7 from Main to that object id
+Defined as field: Not seen
+Defined as static field: Event 1 to allocate object, Event 3 from Main to that object id
+
+Strings
+Passed as parameter: Event 4, as an implicitly allocated object; id not seen before
+Goes out of scope: Not seen, really weird
+Defined inside method: Event 7, as a reference from Main to 0
+Defined as field: Not seen
+Defined as static field: Event 3, as a reference from Main to 0
+
+Int[] arrays
+Passed as parameter: Event 4 as parameter
+Goes out of scope: Event 6 as going out of scope
+Defined inside method: Event 1 to allocate object, Event 7 from Main to that object id
+Defined as field: Not seen
+Defined as static field: Event 1 to allocate object, Event 3 from Main to that object id
+
+String[] arrays
+Passed as parameter: Event 4 as parameter
+Goes out of scope: Event 6 as going out of scope
+Defined inside method: Event 1 to allocate object, Event 7 from Main to that object id
+Defined as field: Not seen
+Defined as static field: Event 1 to allocate object, Event 3 from Main to that object id
+
+Objects of different kinds (Integer and arrays of different types in this example) 
+apparently behave the same way.
+
+ints and presumably all other true primitive types (float, double, short...) behave the 
+same way.
+
+String on the other hand seems to be some kind of mix. When defined inside a method it 
+gets the id 0 just as a primitive type. No allocation involved. But when passed as a 
+parameter, it somehow gets a unique id just as other objects, but there's still no 
+allocation involved. The problem arises when a String gets passed as a parameter and 
+gets treated as a stack reference, but never goes out of scope. A solution might be 
+to check the parameters at Event 4 and exclude any not already existing objects, since 
+all objects that get passed already have to exist. 
+
+COMMAND LINE ARGUMENTS
+
+The above also seems to solve the weird bug that the command line arguments array passed 
+to the main method never gets allocated. However, when trying to use the Strings inside 
+String [] args, the Strings actually get allocated, and that happens BEFORE the main 
+method. These Strings will hence be treated like real objects even though they are 
+immutable and have no value in our analysis. Though to avoid cluttering the code completely 
+just to work around these kind of problems, we can just let it be that these Strings 
+lives in the graph and go out of scope at the end of the main method.
+
+STRINGBUILDER
+
+Also when using Strings with the + operator, Java creates a StringBuilder to concatenate 
+the Strings. It will only get allocated, Event 1, but not stored with Event 3 or 7. Much 
+like with command line Strings, we just let it be there as a never-referenced object in 
+the model.
+
+GARBAGE COLLECTION
+
+Apparently garbage collection doesn't work as anticipated
+Instead object will get "deallocated" when both stack and 
+heap references are 0, which means we have to check that 
+at the end of both remove methods.
+If problem can be fixed, remember to remove functionality 
+from remove_stack_ref and remove_heap_ref

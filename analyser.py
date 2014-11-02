@@ -3,7 +3,7 @@ import sys, gc
 import networkx as nx
 import matplotlib.pyplot as plt
 import operator
-from combinators import *
+from combinators_new import *
 
 
 #simulating enum
@@ -38,6 +38,8 @@ class Model(object):
         raise NotImplementedError()
     def remove_heap_ref(self):
         raise NotImplementedError()
+    def has_obj(self):
+        raise NotImplementedError()
     def get_obj_ids(self):
         raise NotImplementedError()
     def get_obj_queries(self):
@@ -62,24 +64,26 @@ class GraphModel(Model):
         self._g.add_node(obj_id, queries=[qf(obj_id) for qf in self.qry_fs])
 
     def add_stack_ref(self, referrer_id, referee_id):
+        #if referee_id == 0, it's a primitive type and shouldn't be in model
+        if referee_id == "0": return
         #referrer might be a static class that hasn't been added
         if referrer_id not in self._g.nodes():
             self._g.add_node(referrer_id, 
                              queries=[qf(referrer_id) for qf in self.qry_fs])
-        #IMPORTANT: CHECK IF referee_id CAN BE NULL
+        #if there aren't any edges yet
         if referee_id not in self._g.edge[referrer_id]:
-            #NOTE: edge won't be removed even if stack and heap are both 0
             self._g.add_edge(referrer_id, referee_id, stack=0, heap=0)
         self._g.edge[referrer_id][referee_id]["stack"] += 1
 
     def add_heap_ref(self, referrer_id, referee_id):
+        #if referee_id == 0, it's a primitive type and shouldn't be in model
+        if referee_id == "0": return
         #referrer might be a static class that hasn't been added
         if referrer_id not in self._g.nodes():
             self._g.add_node(referrer_id, 
                              queries=[qf(referrer_id) for qf in self.qry_fs])
-        #IMPORTANT: CHECK IF referee_id CAN BE NULL
+        #if there aren't any edges yet
         if referee_id not in self._g.edge[referrer_id]:
-            #NOTE: edge won't be removed even if stack and heap are both 0
             self._g.add_edge(referrer_id, referee_id, stack=0, heap=0)
         self._g.edge[referrer_id][referee_id]["heap"] += 1
 
@@ -92,12 +96,23 @@ class GraphModel(Model):
         if referee_id in self._g.nodes():
             #no need to check below 0, logically impossible
             self._g.edge[referrer_id][referee_id]["stack"] -= 1
+            #"deallocation" work-around
+            if self.count_stack_refs(referee_id) == 0 and \
+               self.count_heap_refs(referee_id) == 0:
+                self.remove_obj(referee_id)
 
     def remove_heap_ref(self, referrer_id, referee_id):
         #referee_id might be 0 or name of a static class ???
         if referee_id in self._g.nodes():
             #no need to check below 0, logically impossible
             self._g.edge[referrer_id][referee_id]["heap"] -= 1
+            #"deallocation" work-around
+            if self.count_stack_refs(referee_id) == 0 and \
+               self.count_heap_refs(referee_id) == 0:
+                self.remove_obj(referee_id)
+
+    def has_obj(self, obj_id):
+        return self._g.has_node(obj_id);
 
     def get_obj_ids(self):
         return self._g.nodes()
@@ -127,9 +142,12 @@ def parse():
     return lines
 
 
-# FIND OUT HOW VARIABLE STORE WORKS
 #TODO: adjust after abstract event format
 def process(model, event):
+    print "obj_ids",
+    print model.get_obj_ids()
+    print "event",
+    print event
     if event[0] == Opcodes.ALLOC:
         model.add_obj(event[1])
     elif event[0] == Opcodes.FLOAD:
@@ -138,12 +156,16 @@ def process(model, event):
         model.remove_heap_ref(event[5], event[3])
         model.add_heap_ref(event[5], event[2])
     elif event[0] == Opcodes.MCALL:
-        pass
+        #Strings should be treated as primitive objects, see notes
+        for arg in event[4:]:
+            if model.has_obj(arg):
+                model.add_stack_ref(event[3], arg);
     elif event[0] == Opcodes.DEALLOC:
-        model.remove_obj(event[1])
-    elif event[0] == Opcodes.MEXIT:
-        #remove all stack references
+        #model.remove_obj(event[1])
+        #see notes
         pass
+    elif event[0] == Opcodes.MEXIT:
+        map(lambda obj_id: model.remove_stack_ref(event[4], obj_id), event[5:])
     elif event[0] == Opcodes.VSTORE:
         model.remove_stack_ref(event[3], event[2])
         model.add_stack_ref(event[3], event[1])
@@ -183,7 +205,7 @@ def main():
     #Exeute everything
     execute(gm, logevents)
     
-    #WE REACH END OF EXECUTION BUT WITHOUT RESULTS. TROUBLESHOOT!!!
+    #WE REACH END OF EXECUTION WITH SUCCESS(?)!! EXAMINE RESULTS!
     print "FINISHED"
     print gm.get_finished_queries()
 
