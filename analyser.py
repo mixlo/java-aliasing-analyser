@@ -3,7 +3,7 @@ import sys, gc
 import networkx as nx
 import matplotlib.pyplot as plt
 import operator
-from combinators_new import *
+from combinators import *
 
 
 #simulating enum
@@ -22,6 +22,12 @@ class LogEventInterface(object):
     #TBI
     pass
 
+
+#REMEMBER NOT TO CONFUSE INTERFACE COMPONENTS WITH IMPLEMENTATION 
+#SPECIFIC COMPONENTS
+
+#THE INTERFACE MAYBE ONLY NEEDS THE METHODS THAT ARE ACTUALLY USED BY 
+#EXTERNAL ACTIVITIES SUCH AS THE PROCESS AND EXECUTE METHODS ?
 
 #INTERFACE
 class Model(object):
@@ -88,6 +94,10 @@ class GraphModel(Model):
         self._g.edge[referrer_id][referee_id]["heap"] += 1
 
     def remove_obj(self, obj_id):
+        #Remove all outgoing references from this object
+        current_out_refs = [edge for edge in self._g.edge[obj_id]]
+        map(lambda x: self.remove_heap_ref(obj_id, x), current_out_refs)
+        #Save queries and remove object
         self.finished_queries[obj_id] = self._g.node[obj_id]["queries"]
         self._g.remove_node(obj_id)
 
@@ -99,6 +109,7 @@ class GraphModel(Model):
             #"deallocation" work-around
             if self.count_stack_refs(referee_id) == 0 and \
                self.count_heap_refs(referee_id) == 0:
+                print "Removing", referee_id
                 self.remove_obj(referee_id)
 
     def remove_heap_ref(self, referrer_id, referee_id):
@@ -109,11 +120,13 @@ class GraphModel(Model):
             #"deallocation" work-around
             if self.count_stack_refs(referee_id) == 0 and \
                self.count_heap_refs(referee_id) == 0:
+                print "Removing", referee_id
                 self.remove_obj(referee_id)
 
     def has_obj(self, obj_id):
         return self._g.has_node(obj_id);
 
+    #Returns node array by value, not by reference
     def get_obj_ids(self):
         return self._g.nodes()
 
@@ -128,6 +141,9 @@ class GraphModel(Model):
         return reduce(lambda x,y: x + y[2]["heap"], 
                       self._g.in_edges(nbunch=obj_id, data=True), 0)
 
+    def count_total_refs(self, obj_id):
+        return self.count_stack_refs(obj_id) + self.count_heap_refs(obj_id)
+
     def get_finished_queries(self):
         return self.finished_queries
 
@@ -135,10 +151,15 @@ class GraphModel(Model):
 #TODO: abstract event format
 def parse():
     lines = []
+    i = 0
     splitline = sys.stdin.readline().strip().split(" ")
+    i = i + 1
+    print "Processed line:", i
     while splitline != [""]:
         lines.append(splitline)
         splitline = sys.stdin.readline().strip().split(" ")
+        i = i + 1
+        print "Processed line:", i
     return lines
 
 
@@ -181,7 +202,18 @@ def execute(model, logevents):
                 qry.apply()
             
 
-# sed -n "47, 71p" output | python analyser.py
+def print_queries(queries):
+    zipped = zip(queries.keys(), queries.values())
+    print "-"*50
+    for obj_id, obj_qs in zipped:
+        print obj_id,
+        for qry in obj_qs:
+            print "\t[{0}] [{1}]  {2}".format(
+                "A" if qry.isAccepting() else " ", 
+                "F" if qry.isFrozen() else " ",
+                qry.toString())
+        print "-"*50
+
 
 #KEEPING A DICTIONARY OF THE OBJECTS WHERE THE VALUES ARE COLLECTIONS OF 
 #QUERIES IS NOT VIABLE IF WE ARE NOT RUNNING THE QUERIES IN TERMS OF 
@@ -194,20 +226,30 @@ def main():
     gc.disable()
     logevents = parse()
     gc.enable()
+    print "Finished parsing!"
     #DEBUG
     #sys.stdin = open("/dev/tty", "r")
 
     #Create model and query factories
-    query_factories = [lambda o: Always(Observe(lambda n: n <= 1, 
-                                                lambda: gm.count_heap_refs(o)))]
+    #FIX THIS ?
+    qb = lambda o: Observe(lambda n: n <= 1, lambda: gm.count_total_refs(o))
+    q1 = lambda o: Always(qb(o))
+    q2 = lambda o: Not(Ever(Not(qb(o))))
+    q3 = lambda o: Not(q1(o))
+    q4 = lambda o: Any([q1(o), q3(o)])
+    q5 = lambda o: All([q1(o), q3(o)])
+
+    query_factories = [q1, q3, q5]
+                       
     gm = GraphModel(query_factories)
 
     #Exeute everything
     execute(gm, logevents)
     
-    #WE REACH END OF EXECUTION WITH SUCCESS(?)!! EXAMINE RESULTS!
     print "FINISHED"
-    print gm.get_finished_queries()
+    qrs = gm.get_finished_queries()
+    #TEST WITH OTHER QUERIES
+    print_queries(qrs)
 
 
 if __name__ == "__main__":

@@ -1,5 +1,5 @@
 class Query(object):
-    def apply(self, evt):
+    def apply(self):
         raise NotImplementedError()
     def isAccepting(self):
         raise NotImplementedError()
@@ -7,48 +7,70 @@ class Query(object):
         raise NotImplementedError()
     def clone(self):
         raise NotImplementedError()
-    def message(self):
+    def toString(self):
         raise NotImplementedError()
 
 
-#TOSTRING METHOD?
+#TOSTRING METHOD? isAccepting and isFrozen
+#Observe(comp_func, getter_1, getter_2, ..., getter_n)
+# To avoid having direct references to functions and objects of the 
+# graph, we use closures(?) (lambdas) that runs the functions on the 
+# objects to get the necessary information. The returned value of each 
+# closure represents an argument of the compare function. These closures 
+# can therefore be (rather poorly) called "argument getters", hence the 
+# names of the parameters used as input to the Observe class.
+#EXAMPLE:
+# q = Observe(comp_func = lambda n, m: n > m, 
+#             getter_1 = lambda: count_stack_refs(obj1), 
+#             getter_2 = lambda: count_heap_refs(obj1))
+# -> q.apply()
+# -> self.state = comp_func(getter_1(), getter_2())
+# -> self.state = comp_func(count_stack_refs(obj1), count_heap_refs(obj1))
+# -> self.state = comp_func(3, 5) e.g.
+# -> self.state = 3 > 5
+# -> self.state = False
 class Observe(Query):
-    def __init__(self, tst):
+    def __init__(self, tst, *arg_getters):
         self.tst = tst
+        self.getters = arg_getters
         # State initial value?
         self.state = None
-    def apply(self, evt):
-        self.state = self.tst(evt)
+    def apply(self):
+        self.state = self.tst(*[get() for get in self.getters])
     def isAccepting(self):
         return self.state
     def isFrozen(self):
         return False
     def clone(self):
-        c = Observe(self.tst)
+        c = Observe(self.tst, *self.getters)
         c.state = self.state
         return c
+    def toString(self):
+        return "Observe(tst)"
 
 
 class Not(Query):
     def __init__(self, q):
         self.q = q
-    def apply(self, evt):
-        self.q.apply(evt)
+    def apply(self):
+        self.q.apply()
     def isAccepting(self):
         return not self.q.isAccepting()
     def isFrozen(self):
         return self.q.isFrozen()
     def clone(self):
         return Not(self.q.clone())
+    def toString(self):
+        return "Not(" + self.q.toString() + ")"
 
 
 class Ever(Query):
     def __init__(self, q):
         self.q = q
         self.success = False
-    def apply(self, evt):
+    def apply(self):
         if self.success: return
-        self.q.apply(evt)
+        self.q.apply()
         if self.q.isAccepting(): self.success = True
     def isAccepting(self):
         return self.success
@@ -58,18 +80,18 @@ class Ever(Query):
         c = Ever(self.q.clone())
         c.success = self.success
         return c
+    def toString(self):
+        return "Ever(" + self.q.toString() + ")"
 
 
-#Always(q) == Not(Ever(Not(q))) ???
-
-
+#Always(q) == Not(Ever(Not(q)))
 class Always(Query):
     def __init__(self, q):
         self.q = q
         self.failure = False
-    def apply(self, evt):
+    def apply(self):
         if self.failure: return
-        self.q.apply(evt)
+        self.q.apply()
         if not self.q.isAccepting(): self.failure = True
     def isAccepting(self):
         return not self.failure
@@ -79,15 +101,17 @@ class Always(Query):
         c = Always(self.q.clone())
         c.failure = self.failure
         return c
+    def toString(self):
+        return "Always(" + self.q.toString() + ")"
 
 
 #I'm torn between the beauty of one-liners and the 80 cpl (/ 72 cpl) rule...
 class Any(Query):
     def __init__(self, qs):
         self.qs = qs
-    def apply(self, evt):
+    def apply(self):
         if self.isFrozen(): return
-        map(lambda q: q.apply(evt), self.qs)
+        map(lambda q: q.apply(), self.qs)
         #removing any query frozen in a non-accepting state
         self.qs = filter(lambda q: q.isAccepting() or not q.isFrozen(), self.qs)
     def isAccepting(self):
@@ -98,14 +122,16 @@ class Any(Query):
         return any_succ or all_fail
     def clone(self):
         return Any(map(lambda q: q.clone(), self.qs))
+    def toString(self):
+        return "Any([" + ", ".join([q.toString() for q in self.qs]) + "])"
 
 
 class All(Query):
     def __init__(self, qs):
         self.qs = qs
-    def apply(self, evt):
+    def apply(self):
         if self.isFrozen(): return
-        map(lambda q: q.apply(evt), self.qs)
+        map(lambda q: q.apply(), self.qs)
         #removing any query frozen in an accepting state
         self.qs = filter(lambda q: not q.isAccepting() or not q.isFrozen(), self.qs)
     def isAccepting(self):
@@ -116,3 +142,5 @@ class All(Query):
         return any_fail or all_succ
     def clone(self):
         return All(map(lambda q: q.clone(), self.qs))
+    def toString(self):
+        return "All([" + ", ".join([q.toString() for q in self.qs]) + "])"
