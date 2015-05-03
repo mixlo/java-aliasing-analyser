@@ -14,12 +14,19 @@ Defined inside method: Event 1 to allocate object, Event 7 from Main to that obj
 Defined as field: Not seen
 Defined as static field: Event 1 to allocate object, Event 3 from Main to that object id
 
-Strings
+Strings (non-allocated)
 Passed as parameter: Event 4, as an implicitly allocated object; id not seen before
 Goes out of scope: Not seen, really weird
 Defined inside method: Event 7, as a reference from Main to 0
 Defined as field: Not seen
 Defined as static field: Event 3, as a reference from Main to 0
+
+Strings (allocated)
+Passed as parameter: Event 4 as parameter
+Goes out of scope: Event 6 as going out of scope
+Defined inside method: Event 1 to allocate object, Event 7 from Main to that object id
+Defined as field: Not seen
+Defined as static field: Event 1 to allocate object, Event 3 from Main to that object id
 
 Int[] arrays
 Passed as parameter: Event 4 as parameter
@@ -47,7 +54,12 @@ parameter, it somehow gets a unique id just as other objects, but there's still 
 allocation involved. The problem arises when a String gets passed as a parameter and 
 gets treated as a stack reference, but never goes out of scope. A solution might be 
 to check the parameters at Event 4 and exclude any not already existing objects, since 
-all objects that get passed already have to exist. 
+all objects that get passed already have to exist.
+
+NOTE: Examining the bytecode with javap, Strings are apparently loaded from a constant 
+pool and thus not allocated with 'new', but they are still loaded and stored from and to 
+the stack with 'aload' and 'astore'. This is probably why in Erik's program, no allocation 
+event occurs for Strings although they are seen when passed as arguments to methods.
 
 COMMAND LINE ARGUMENTS
 
@@ -74,3 +86,15 @@ heap references are 0, which means we have to check that
 at the end of both remove methods.
 If problem can be fixed, remember to remove functionality 
 from remove_stack_ref and remove_heap_ref
+
+
+REMEMBER TO CHECK
+
+- Where main argument comes from and why it doesn't go out of scope
+- Generic classes
+- Anonymous classes
+
+
+JAVA NATIVE CODE
+http://docs.oracle.com/javase/specs/jvms/se7/html/jvms-6.html#jvms-6.5.aload
+http://journals.ecs.soton.ac.uk/java/tutorial/native1.1/implementing/method.html

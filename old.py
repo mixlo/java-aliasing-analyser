@@ -144,3 +144,12 @@ def first_unique_then_aliased_query_function():
     s2.set_transitions([t3])
 
     return Query(s1)
+
+
+def remove_obj(self, obj_id):
+    #Remove all outgoing references from this object
+    current_out_refs = [edge for edge in self._g.edge[obj_id]]
+    map(lambda x: self.remove_heap_ref(obj_id, x), current_out_refs)
+    #Save queries and remove object
+    self.finished_queries[obj_id] = self._g.node[obj_id]["queries"]
+    self._g.remove_node(obj_id)

@@ -16,19 +16,20 @@ class Query(object):
 # To avoid having direct references to functions and objects of the 
 # graph, we use closures(?) (lambdas) that runs the functions on the 
 # objects to get the necessary information. The returned value of each 
-# closure represents an argument of the compare function. These closures 
-# can therefore be (rather poorly) called "argument getters", hence the 
-# names of the parameters used as input to the Observe class.
+# closure represents an argument of the compare function. These 
+# closures can therefore be (rather poorly) called "argument getters", 
+# hence the names of the parameters used as input to the Observe class.
 #EXAMPLE:
 # q = Observe(comp_func = lambda n, m: n > m, 
 #             getter_1 = lambda: count_stack_refs(obj1), 
 #             getter_2 = lambda: count_heap_refs(obj1))
 # -> q.apply()
-# -> self.state = comp_func(getter_1(), getter_2())
-# -> self.state = comp_func(count_stack_refs(obj1), count_heap_refs(obj1))
-# -> self.state = comp_func(3, 5) e.g.
-# -> self.state = 3 > 5
-# -> self.state = False
+# Step-by-step showing the value of self.state:
+# -> comp_func(getter_1(), getter_2())
+# -> comp_func(count_stack_refs(obj1), count_heap_refs(obj1))
+# -> comp_func(3, 5) e.g.
+# -> 3 > 5
+# -> False
 class Observe(Query):
     def __init__(self, tst, *arg_getters):
         self.tst = tst
@@ -61,7 +62,7 @@ class Not(Query):
     def clone(self):
         return Not(self.q.clone())
     def toString(self):
-        return "Not(" + self.q.toString() + ")"
+        return "Not({0})".format(self.q.toString())
 
 
 class Ever(Query):
@@ -81,7 +82,7 @@ class Ever(Query):
         c.success = self.success
         return c
     def toString(self):
-        return "Ever(" + self.q.toString() + ")"
+        return "Ever({0})".format(self.q.toString())
 
 
 #Always(q) == Not(Ever(Not(q)))
@@ -102,10 +103,9 @@ class Always(Query):
         c.failure = self.failure
         return c
     def toString(self):
-        return "Always(" + self.q.toString() + ")"
+        return "Always({0})".format(self.q.toString())
 
 
-#I'm torn between the beauty of one-liners and the 80 cpl (/ 72 cpl) rule...
 class Any(Query):
     def __init__(self, qs):
         self.qs = qs
@@ -113,17 +113,24 @@ class Any(Query):
         if self.isFrozen(): return
         map(lambda q: q.apply(), self.qs)
         #removing any query frozen in a non-accepting state
-        self.qs = filter(lambda q: q.isAccepting() or not q.isFrozen(), self.qs)
+        self.qs = filter(lambda q: q.isAccepting() or 
+                                   not q.isFrozen(), 
+                         self.qs)
     def isAccepting(self):
         return any(map(lambda q: q.isAccepting(), self.qs))
     def isFrozen(self):
-        any_succ = any(map(lambda q: q.isFrozen() and q.isAccepting(), self.qs))
-        all_fail = all(map(lambda q: q.isFrozen() and not q.isAccepting(), self.qs))
+        any_succ = any(map(lambda q: q.isFrozen() and 
+                                     q.isAccepting(), 
+                           self.qs))
+        all_fail = all(map(lambda q: q.isFrozen() and 
+                                     not q.isAccepting(), 
+                           self.qs))
         return any_succ or all_fail
     def clone(self):
         return Any(map(lambda q: q.clone(), self.qs))
     def toString(self):
-        return "Any([" + ", ".join([q.toString() for q in self.qs]) + "])"
+        return "Any([{0}])" \
+               .format(", ".join([q.toString() for q in self.qs]))
 
 
 class All(Query):
@@ -133,14 +140,21 @@ class All(Query):
         if self.isFrozen(): return
         map(lambda q: q.apply(), self.qs)
         #removing any query frozen in an accepting state
-        self.qs = filter(lambda q: not q.isAccepting() or not q.isFrozen(), self.qs)
+        self.qs = filter(lambda q: not q.isAccepting() or \
+                                   not q.isFrozen(), 
+                         self.qs)
     def isAccepting(self):
         return all(map(lambda q: q.isAccepting(), self.qs))
     def isFrozen(self):
-        any_fail = any(map(lambda q: q.isFrozen() and not q.isAccepting(), self.qs))
-        all_succ = all(map(lambda q: q.isFrozen() and q.isAccepting(), self.qs))
+        any_fail = any(map(lambda q: q.isFrozen() and 
+                                     not q.isAccepting(), 
+                           self.qs))
+        all_succ = all(map(lambda q: q.isFrozen() 
+                                     and q.isAccepting(), 
+                           self.qs))
         return any_fail or all_succ
     def clone(self):
         return All(map(lambda q: q.clone(), self.qs))
     def toString(self):
-        return "All([" + ", ".join([q.toString() for q in self.qs]) + "])"
+        return "All([{0}])" \
+               .format(", ".join([q.toString() for q in self.qs]))
