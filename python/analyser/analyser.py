@@ -1,8 +1,9 @@
 #!/usr/bin/env python
-import sys, gc
+import sys, gc, time
 import graphmodel
 from combinators import *
 
+#TODO: Documentation
 
 class Opcodes:
     ALLOC = "1"
@@ -64,12 +65,19 @@ def process(model, event):
         raise Exception("OPCODE {0} NOT RECOGNISED".format(event[0]))
         
 
-def execute(model, logevents):
-    for event in logevents:
+def execute(model, logevents, fetch_rate = None):
+    data = []
+    for i, event in enumerate(logevents):
+        if i % 1000 == 0:
+            print "Processing line", i
         process(model, event)
-        for obj in model.get_obj_ids():
+        objs = model.get_obj_ids()
+        if fetch_rate and i % fetch_rate == 0:
+            data.append([model.in_total_refs(o) for o in objs])
+        for obj in objs:
             for qry in model.get_obj_queries(obj):
                 qry.apply()
+    return data
 
 
 #Theoretically, after all events are processed, no objects should 
@@ -83,46 +91,75 @@ def get_remaining_results(model, results):
              "queries" : model.get_obj_queries(obj)}
 
 
-def print_results(results):
-    print "\nRESULTS\nA = Accepting, F = Frozen"
+def print_results(results, ali_data, verbose = False):
+    print "\n", "-"*50
+    print "\nRESULTS"
+
+    if verbose:
+        print "\nA = Accepting, F = Frozen"
+        print "-"*50
+
     zipped = zip(results.keys(), results.values())
     query_stats = {}
-    print "-"*50
     for obj_id, data in zipped:
-        print "OBJECT: {0}, TYPE: {1}".format(obj_id, data["type"])
+        if verbose:
+            print "OBJECT: {0}, TYPE: {1}".format(obj_id, data["type"])
         for qry in data["queries"]:
             query_stats[qry.toString()] = \
                 query_stats.get(qry.toString(), 0) + qry.isAccepting()
-            print "\t[{0}] [{1}]  {2}".format(
-                "A" if qry.isAccepting() else " ", 
-                "F" if qry.isFrozen() else " ",
-                qry.toString())
-        print "-"*50
-    res_len = len(results)
+            if verbose:
+                print "\t[{0}] [{1}]  {2}".format(
+                    "A" if qry.isAccepting() else " ", 
+                    "F" if qry.isFrozen() else " ",
+                    qry.toString())
+        if verbose:
+            print "-"*50
+
     print "\nQueries in accepting state:"
+    res_len = len(results)
     for qry in query_stats:
         print "{0}/{1} ~= {2}%\t{3}".format(
             query_stats[qry], 
             res_len, 
             round((float(query_stats[qry]) / float(res_len)) * 100, 2),
             qry)
+
+    if ali_data:
+        print "\nAliasing data:"
+        max_ir = max(map(lambda x: max(x), ali_data))
+        min_ir = min(map(lambda x: min(x), ali_data))
+        avg_ir = sum(map(lambda x: sum(x)/float(len(x)), ali_data))/ \
+              float(len(ali_data))
+        print "Max incoming references:", max_ir
+        print "Min incoming references:", min_ir
+        print "Avg incoming references:", avg_ir
+
     print
 
 
 def main():
     #Parse the events
+    print "\nParsing input..."
+
+    start = int(time.time())
     gc.disable()
     logevents = parse()
     gc.enable()
+    end = int(time.time())
 
-    print "\nFinished reading output file"
+    m, s = divmod(end-start, 60)
+    h, m = divmod(m, 60)
+    print "Input parsing time: {0:02d}:{1:02d}:{2:02d}" \
+        .format(h, m, s)
 
     #Create model and query factories
 
     #lambdas only take one argument, because right now, graph model 
     #only accepts queries that are run on each object by itself, not 
     #e.g. two objects in relation to each other
-    qb = lambda o: Observe("lambda in_total_refs: in_total_refs <= 1", lambda: gm.in_total_refs(o))
+    qb = lambda o: Observe("lambda in_total_refs: in_total_refs <= 1", 
+                           lambda: gm.in_total_refs(o))
+
     q1 = lambda o: Always(qb(o))
     q2 = lambda o: Not(Ever(Not(qb(o))))
     q3 = lambda o: Not(q1(o))
@@ -134,13 +171,22 @@ def main():
     gm = graphmodel.GraphModel(query_factories)
 
     #Exeute everything
-    execute(gm, logevents)
+    fetch_rate = 1
+    print "\nExecuting with fetch rate {0}\n".format(fetch_rate)
+    aliasing_data = execute(gm, logevents, fetch_rate)
 
     print "\nFinished executing"
+
+    #Write plotting data to file
+    f = open("aliasing_data.dat", "w")
+    for i,x in enumerate(aliasing_data):
+        f.write("{0} {1} {2} {3}\n".format(
+            i * fetch_rate, max(x), min(x), sum(x)/float(len(x))))
+    f.close()
 
     #Get results
     results = gm.get_results()
     get_remaining_results(gm, results)    
 
     #Print results
-    print_results(results)
+    print_results(results, aliasing_data)
