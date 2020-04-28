@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-import sys, gc, time
+import sys, os, gc, time
 import graphmodel
 from combinators import *
 
@@ -24,6 +24,17 @@ def parse():
     return lines
 
 
+def parse_file(log_file):
+    return [line.strip().split(" ") for line in log_file]
+
+
+def parse_fn(log_fn):
+    if not os.path.isfile(log_fn):
+        raise Exception("LOG FILE {} DOESN'T EXIST".format(log_fn))
+    with open(log_fn, "r") as log_file:
+        return parse_file(log_file)
+
+
 def process(model, event):
     if event[0] == Opcodes.ALLOC:
         if not model.has_obj(event[1]):
@@ -40,6 +51,10 @@ def process(model, event):
         if event[2] != "0":
             model.add_heap_ref(event[5], event[2])
     elif event[0] == Opcodes.MCALL:
+        # If caller doesn't exist
+        # (should never happen, but has been observed in JVM startup events)
+        if not model.has_obj(event[2]):
+            model.add_obj(event[2])
         # If methodOwner doesn't exist 
         # (e.g. when methodName is <init>)
         if not model.has_obj(event[3]):
@@ -49,6 +64,9 @@ def process(model, event):
             # (e.g. unallocated string object)
             if not model.has_obj(arg):
                 model.add_obj(arg)
+            # Adding a stack reference from the method owner to the passed
+            # object, since the method owner must have had a reference to the
+            # object to be able to pass it.
             model.add_stack_ref(event[3], arg)
     elif event[0] == Opcodes.DEALLOC:
         model.remove_obj(event[1])
@@ -57,7 +75,9 @@ def process(model, event):
             if model.has_stack_ref(event[4], arg):
                 model.remove_stack_ref(event[4], arg)
     elif event[0] == Opcodes.VSTORE:
-        if event[2] != "0":
+        # The event implies that there is a reference between caller and
+        # oldObjID, but this must be verified due to an observed anomaly.
+        if event[2] != "0" and model.has_stack_ref(event[3], event[2]):
             model.remove_stack_ref(event[3], event[2])
         if event[1] != "0":
             model.add_stack_ref(event[3], event[1])
@@ -83,6 +103,7 @@ def execute(model, logevents, fetch_rate = None):
 #Theoretically, after all events are processed, no objects should 
 #remain in the model, but it has to be taken into account that 
 #deallocation doesn't work as expected.
+# This function should be called after model.get_results() for correct results.
 def get_remaining_results(model, results):
     remaining = model.get_obj_ids()
     for obj in remaining:
@@ -137,56 +158,44 @@ def print_results(results, ali_data, verbose = False):
     print
 
 
-def main():
-    #Parse the events
+def format_time(seconds):
+    seconds = int(seconds)
+    m, s = divmod(seconds, 60)
+    h, m = divmod(m, 60)
+    return "{0:02d}:{1:02d}:{2:02d}".format(h, m, s)
+    
+
+def run(model, fetch_rate=1, in_file=None, out_file="alidata.dat"):
+    # Parse the events
     print "\nParsing input..."
 
-    start = int(time.time())
+    start = time.time()
     gc.disable()
-    logevents = parse()
+    logevents = parse_fn(in_file) if in_file else parse_file(sys.stdin)
     gc.enable()
-    end = int(time.time())
-
-    m, s = divmod(end-start, 60)
-    h, m = divmod(m, 60)
-    print "Input parsing time: {0:02d}:{1:02d}:{2:02d}" \
-        .format(h, m, s)
-
-    #Create model and query factories
-
-    #lambdas only take one argument, because right now, graph model 
-    #only accepts queries that are run on each object by itself, not 
-    #e.g. two objects in relation to each other
-    qb = lambda o: Observe("lambda in_total_refs: in_total_refs <= 1", 
-                           lambda: gm.in_total_refs(o))
-
-    q1 = lambda o: Always(qb(o))
-    q2 = lambda o: Not(Ever(Not(qb(o))))
-    q3 = lambda o: Not(q1(o))
-    q4 = lambda o: Any([q1(o), q3(o)])
-    q5 = lambda o: All([q1(o), q3(o)])
-
-    query_factories = [q1, q3, q5]
-                       
-    gm = graphmodel.GraphModel(query_factories)
-
-    #Exeute everything
-    fetch_rate = 1
+    end = time.time()
+    
+    print "Input parsing time: {}".format(format_time(end-start))
     print "\nExecuting with fetch rate {0}\n".format(fetch_rate)
-    aliasing_data = execute(gm, logevents, fetch_rate)
+
+    start = time.time()
+    aliasing_data = execute(model, logevents, fetch_rate)
+    end = time.time()
 
     print "\nFinished executing"
+    print "Execution time: {}".format(format_time(end-start))
 
-    #Write plotting data to file
-    f = open("aliasing_data.dat", "w")
-    for i,x in enumerate(aliasing_data):
-        f.write("{0} {1} {2} {3}\n".format(
-            i * fetch_rate, max(x), min(x), sum(x)/float(len(x))))
-    f.close()
+    # Write plotting data to file
+    with open(out_file, "w") as f:
+        for i,x in enumerate(aliasing_data):
+            f.write("{0} {1} {2} {3}\n".format(
+                i * fetch_rate / float(len(logevents)),
+                max(x), min(x), sum(x) / float(len(x))))
 
-    #Get results
-    results = gm.get_results()
-    get_remaining_results(gm, results)    
+    # Get results
+    results = model.get_results()
+    # Need to collect information about potentially remaining objects in model.
+    get_remaining_results(model, results)    
 
-    #Print results
+    # Print results
     print_results(results, aliasing_data)
