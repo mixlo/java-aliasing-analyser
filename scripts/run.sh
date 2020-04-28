@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-PYSCRIPT="../python/analyser/test.py"
+PYSCRIPT="../analyser/test.py"
 
 if [ "$#" -eq 1 ]; then
     cat $1 | python $PYSCRIPT
