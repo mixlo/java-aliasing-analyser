@@ -159,6 +159,21 @@ class Model(object):
         """
         raise NotImplementedError()
 
+    def reset_obj_queries(self, obj_id):
+        """
+        TYPE: string -> void
+        Reset all queries for a given object.
+        """
+        raise NotImplementedError()
+
+    def collect_data(self, progress):
+        """
+        TYPE: float -> void
+        Run all data collection functions and save the results to 
+        their respectively assigned files. The provided argument 
+        signifies the progress percentage of the execution.
+        """
+
     def get_results(self):
         """
         TYPE: void -> dict

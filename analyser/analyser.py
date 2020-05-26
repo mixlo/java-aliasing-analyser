@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-import sys, os, gc, time
+import sys, os, gc, time, json
 import graphmodel
 from combinators import *
 
@@ -40,7 +40,15 @@ def process(model, event):
         if not model.has_obj(event[1]):
             model.add_obj(event[1], event[2])
         else:
+            # Shouldn't happen, but most often in the logs, the object
+            # constructor method event (4) is run before allocation event (1),
+            # meaning that the object is has to be added to the graph without
+            # a type, and then have it set in this following allocation event.
+            # Since this is the allocation event, and therefore the first time
+            # the object SHOULD be observed, it makes sense to reset the
+            # object's queries, whatever they were up until this moment.
             model.set_obj_type(event[1], event[2])
+            model.reset_obj_queries(event[1])
     elif event[0] == Opcodes.FLOAD:
         pass
     elif event[0] == Opcodes.FSTORE:
@@ -82,22 +90,26 @@ def process(model, event):
         if event[1] != "0":
             model.add_stack_ref(event[3], event[1])
     else:
-        raise Exception("OPCODE {0} NOT RECOGNISED".format(event[0]))
+        #raise Exception("OPCODE {0} NOT RECOGNISED".format(event[0]))
+        print "ERROR: OPCODE {0} NOT RECOGNISED".format(event[0])
         
 
-def execute(model, logevents, fetch_rate = None):
-    data = []
-    for i, event in enumerate(logevents):
-        if i % 1000 == 0:
+def execute(model, log_events, query_rate=1, collect_rate=1, update_rate=1000):
+    for i, event in enumerate(log_events):
+        if i % update_rate == 0:
             print "Processing line", i
+            
+        if i % collect_rate == 0:
+            model.collect_data(i / float(len(log_events)))
+            
         process(model, event)
-        objs = model.get_obj_ids()
-        if fetch_rate and i % fetch_rate == 0:
-            data.append([model.in_total_refs(o) for o in objs])
-        for obj in objs:
-            for qry in model.get_obj_queries(obj):
-                qry.apply()
-    return data
+        
+        if i % query_rate == 0:
+            for obj in model.get_obj_ids():
+                for qry in model.get_obj_queries(obj):
+                    qry.apply()
+    
+    model.collect_data(1.0)
 
 
 #Theoretically, after all events are processed, no objects should 
@@ -112,52 +124,6 @@ def get_remaining_results(model, results):
              "queries" : model.get_obj_queries(obj)}
 
 
-def print_results(results, ali_data, verbose = False):
-    print "\n", "-"*50
-    print "\nRESULTS"
-
-    if verbose:
-        print "\nA = Accepting, F = Frozen"
-        print "-"*50
-
-    zipped = zip(results.keys(), results.values())
-    query_stats = {}
-    for obj_id, data in zipped:
-        if verbose:
-            print "OBJECT: {0}, TYPE: {1}".format(obj_id, data["type"])
-        for qry in data["queries"]:
-            query_stats[qry.toString()] = \
-                query_stats.get(qry.toString(), 0) + qry.isAccepting()
-            if verbose:
-                print "\t[{0}] [{1}]  {2}".format(
-                    "A" if qry.isAccepting() else " ", 
-                    "F" if qry.isFrozen() else " ",
-                    qry.toString())
-        if verbose:
-            print "-"*50
-
-    print "\nQueries in accepting state:"
-    res_len = len(results)
-    for qry in query_stats:
-        print "{0}/{1} ~= {2}%\t{3}".format(
-            query_stats[qry], 
-            res_len, 
-            round((float(query_stats[qry]) / float(res_len)) * 100, 2),
-            qry)
-
-    if ali_data:
-        print "\nAliasing data:"
-        max_ir = max(map(lambda x: max(x), ali_data))
-        min_ir = min(map(lambda x: min(x), ali_data))
-        avg_ir = sum(map(lambda x: sum(x)/float(len(x)), ali_data))/ \
-              float(len(ali_data))
-        print "Max incoming references:", max_ir
-        print "Min incoming references:", min_ir
-        print "Avg incoming references:", avg_ir
-
-    print
-
-
 def format_time(seconds):
     seconds = int(seconds)
     m, s = divmod(seconds, 60)
@@ -165,37 +131,38 @@ def format_time(seconds):
     return "{0:02d}:{1:02d}:{2:02d}".format(h, m, s)
     
 
-def run(model, fetch_rate=1, in_file=None, out_file="alidata.dat"):
+def run(model, in_file=None, query_rate=1, collect_rate=1, update_rate=1000):
     # Parse the events
-    print "\nParsing input..."
+    print "Parsing input..."
 
     start = time.time()
     gc.disable()
-    logevents = parse_fn(in_file) if in_file else parse_file(sys.stdin)
+    log_events = parse_fn(in_file) if in_file else parse_file(sys.stdin)
     gc.enable()
     end = time.time()
     
-    print "Input parsing time: {}".format(format_time(end-start))
-    print "\nExecuting with fetch rate {0}\n".format(fetch_rate)
+    print "\nExecuting with parameters:"
+    if in_file:
+        print "-- in_file = {}".format(in_file)
+    print "-- query_rate = {}".format(query_rate)
+    print "-- collect_rate = {}".format(collect_rate)
+    print "-- update_rate = {}".format(update_rate)
+    print
 
     start = time.time()
-    aliasing_data = execute(model, logevents, fetch_rate)
+    execute(model,
+            log_events,
+            query_rate=query_rate,
+            collect_rate=collect_rate,
+            update_rate=update_rate)
     end = time.time()
 
     print "\nFinished executing"
     print "Execution time: {}".format(format_time(end-start))
 
-    # Write plotting data to file
-    with open(out_file, "w") as f:
-        for i,x in enumerate(aliasing_data):
-            f.write("{0} {1} {2} {3}\n".format(
-                i * fetch_rate / float(len(logevents)),
-                max(x), min(x), sum(x) / float(len(x))))
-
     # Get results
     results = model.get_results()
     # Need to collect information about potentially remaining objects in model.
-    get_remaining_results(model, results)    
+    get_remaining_results(model, results)
 
-    # Print results
-    print_results(results, aliasing_data)
+    return results

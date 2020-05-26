@@ -6,9 +6,11 @@ import networkx as nx
 
 # Implementation of model using a DiGraph from the networkx library
 class GraphModel(model.Model):
-    def __init__(self, qry_fs):
+    def __init__(self, qry_fs, data_collectors=[]):
         self._g = nx.DiGraph()
         self.qry_fs = qry_fs
+        self.data_collectors = [(open(fn, "w+"), func, to_str) \
+                                for fn, func, to_str in data_collectors]
         self.results = {}
 
     def add_obj(self, obj_id, obj_type="(unknown)"):
@@ -18,7 +20,8 @@ class GraphModel(model.Model):
                             .format(obj_id))
         self._g.add_node(obj_id, 
                          type=obj_type,
-                         queries=[qf(obj_id) for qf in self.qry_fs])
+                         queries=[qf(self, obj_id) \
+                                  for qf in self.qry_fs])
 
     def set_obj_type(self, obj_id, obj_type):
         if not self._g.has_node(obj_id):
@@ -33,7 +36,7 @@ class GraphModel(model.Model):
                             "Object {0} doesn't exist" \
                             .format(obj_id))
         return self._g.node[obj_id]["type"]
-
+    
     def add_stack_ref(self, referrer_id, referee_id):
         if not self._g.has_node(referrer_id):
             raise Exception("add_stack_ref: "
@@ -153,7 +156,7 @@ class GraphModel(model.Model):
     #Returns node array by value, not by reference
     def get_obj_ids(self):
         return self._g.nodes()
-
+    
     #Returns queries by reference, to be able to apply them
     def get_obj_queries(self, obj_id):
         if not self._g.has_node(obj_id):
@@ -161,6 +164,26 @@ class GraphModel(model.Model):
                             "Object {0} doesn't exist" \
                             .format(obj_id))
         return self._g.node[obj_id]["queries"]
+
+    def reset_obj_queries(self, obj_id):
+        if not self._g.has_node(obj_id):
+            raise Exception("reset_obj_queries: "
+                            "Object {0} doesn't exist" \
+                            .format(obj_id))
+        self._g.node[obj_id]["queries"] = [qf(self, obj_id) \
+                                           for qf in self.qry_fs]
+
+    def collect_data(self, progress):
+        for save_file, func, to_str in self.data_collectors:
+            save_file.write("{}, {}\n".format(progress,
+                                              to_str(func(self))))
+
+    def get_results(self):
+        for save_file, _, _ in self.data_collectors:
+            save_file.close()
+        return self.results.copy()
+
+    # Own methods, not part of the interface. Used in queries.
 
     def in_stack_refs(self, obj_id):
         if not self._g.has_node(obj_id):
@@ -210,5 +233,20 @@ class GraphModel(model.Model):
         return reduce(lambda x,y: x + y[2]["stack"] + y[2]["heap"], 
                       self._g.out_edges(obj_id, data=True), 0)
 
-    def get_results(self):
-        return self.results.copy()
+    def is_instance_of(self, obj_id, obj_type):
+        if not self._g.has_node(obj_id):
+            raise Exception("is_instance_of: "
+                            "Object {0} doesn't exist" \
+                            .format(obj_id))
+        return self._g.node[obj_id]["type"] == obj_type
+    
+    def is_builtin(self, obj_id):
+        if not self._g.has_node(obj_id):
+            raise Exception("is_builtin: "
+                            "Object {0} doesn't exist" \
+                            .format(obj_id))
+        t = self._g.node[obj_id]["type"]
+        return (t == "(unknown)" or
+                t.startswith("java/") or
+                t.startswith("sun/") or
+                t.startswith("["))

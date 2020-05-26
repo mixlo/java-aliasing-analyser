@@ -27,24 +27,49 @@ class Observe(query.Query):
     -> q.state = 3 > 5
     -> q.state = False
     """
+    
+    """
     def __init__(self, tst_str, *arg_getters):
         self.tst_str = tst_str[tst_str.index(":")+1:].strip(" ")
         self.tst = eval(tst_str)
         self.getters = arg_getters
         # State initial value?
         self.state = None
+    """
+    def __init__(self, name, tst):
+        self.name = name
+        self.tst = tst
+        self.state = None
+
+    """
     def apply(self):
         self.state = self.tst(*[get() for get in self.getters])
+    """
+    def apply(self):
+        self.state = self.tst()
+        
     def isAccepting(self):
         return self.state
     def isFrozen(self):
         return False
+    
+    """
     def clone(self):
         c = Observe(self.tst, *self.getters)
         c.state = self.state
         return c
+    """
+    def clone(self):
+        c = Observe(self.name, self.tst)
+        c.state = self.state
+        return c
+    
+    """
     def toString(self):
         return self.tst_str
+    """
+    def toString(self):
+        return self.name
 
 
 class Not(query.Query):
@@ -139,7 +164,7 @@ class All(query.Query):
     def apply(self):
         if self.isFrozen(): return
         map(lambda q: q.apply(), self.qs)
-        #removing any query frozen in an accepting state
+        # Removing any query frozen in an accepting state
         self.qs = filter(lambda q: not q.isAccepting() or \
                                    not q.isFrozen(), 
                          self.qs)
@@ -157,3 +182,23 @@ class All(query.Query):
         return All(map(lambda q: q.clone(), self.qs))
     def toString(self):
         return self.str_repr
+
+
+class Immediately(query.Query):
+    def __init__(self, q):
+        self.q = q
+        self.done = False
+    def apply(self):
+        if self.done: return
+        self.q.apply()
+        self.done = True
+    def isAccepting(self):
+        return self.q.isAccepting()
+    def isFrozen(self):
+        return self.done
+    def clone(self):
+        c = Immediately(self.q.clone())
+        c.done = self.done
+        return c
+    def toString(self):
+        return "Immediately({0})".format(self.q.toString())
