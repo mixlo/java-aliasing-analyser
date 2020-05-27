@@ -2,7 +2,6 @@
 import analyser
 import graphmodel
 from combinators import *
-import numpy as np
 import matplotlib.pyplot as plt
 import sys
 import os
@@ -20,11 +19,8 @@ import datetime
 # Implemented by user:
 # ---
 # A model based on Model interface, e.g. graphmodel.py
-
-# 1. Create queries using Combinators
-# 2. Create instance of own implementation of Model interface,
-#    passing the queries as arguments
-# 3. run analyser.execute(filename, model, collect_rate, out_file="alidata.dat")
+# A script such as this one that executes the analyser with an instance of the
+# model, provided with query factories, data collectors and other parameters.
 
 
 def str_to_int(s):
@@ -137,13 +133,14 @@ def bltin_vs_custom(model):
 def main():
     postfix = datetime.datetime.now().strftime("%Y%m%d%H%M%S")
     in_file = None
+    data_dir = "../data"
     
     if len(sys.argv) >= 2 and os.path.isfile(sys.argv[1]):
         in_file = sys.argv[1]
         base = os.path.splitext(os.path.basename(in_file))[0]
         postfix = "{}_{}".format(base, postfix)
 
-    os.mkdir("./data/results_{}".format(postfix))
+    os.mkdir("{}/results_{}".format(data_dir, postfix))
     
     #Create model and query factories
 
@@ -166,9 +163,10 @@ def main():
                        custom_obj,
                        custom_le4_inc_refs]
     
-    min_max_avg_fn = "./data/results_{0}/min_max_avg_{0}.csv".format(postfix)
-    bltin_vs_custom_fn = "./data/results_{0}/bltin_vs_custom_{0}.csv" \
-                         .format(postfix)
+    min_max_avg_fn = "{0}/results_{1}/min_max_avg_{1}.csv" \
+                     .format(data_dir, postfix)
+    bltin_vs_custom_fn = "{0}/results_{1}/bltin_vs_custom_{1}.csv" \
+                         .format(data_dir, postfix)
     
     data_collectors = [
         (min_max_avg_fn,  min_max_avg, lambda x: str(x).strip("()")),
@@ -180,13 +178,13 @@ def main():
 
     gm = graphmodel.GraphModel(query_factories, data_collectors)
     
-    out_file = "./data/results_{0}/query_results_{0}.txt".format(postfix)
+    out_file = "{0}/results_{1}/query_results_{1}.txt".format(data_dir, postfix)
     of = open(out_file, "w")
     
     query_results = analyser.run(gm,
                                  in_file=in_file,
-                                 query_rate=10,
-                                 collect_rate=10,
+                                 query_rate=1,
+                                 collect_rate=1,
                                  update_rate=1000)
     print_query_results(query_results, verbose=False, out_file=of)
     

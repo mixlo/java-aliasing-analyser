@@ -49,15 +49,18 @@ def process(model, event):
             # object's queries, whatever they were up until this moment.
             model.set_obj_type(event[1], event[2])
             model.reset_obj_queries(event[1])
+    
     elif event[0] == Opcodes.FLOAD:
         pass
+    
     elif event[0] == Opcodes.FSTORE:
         if not model.has_obj(event[5]):
             model.add_obj(event[5])
-        if event[3] != "0":
+        elif event[3] != "0":
             model.remove_heap_ref(event[5], event[3])
         if event[2] != "0":
             model.add_heap_ref(event[5], event[2])
+    
     elif event[0] == Opcodes.MCALL:
         # If caller doesn't exist
         # (should never happen, but has been observed in JVM startup events)
@@ -76,12 +79,15 @@ def process(model, event):
             # object, since the method owner must have had a reference to the
             # object to be able to pass it.
             model.add_stack_ref(event[3], arg)
+    
     elif event[0] == Opcodes.DEALLOC:
         model.remove_obj(event[1])
+    
     elif event[0] == Opcodes.MEXIT:
         for arg in event[5:]:
             if model.has_stack_ref(event[4], arg):
                 model.remove_stack_ref(event[4], arg)
+    
     elif event[0] == Opcodes.VSTORE:
         # The event implies that there is a reference between caller and
         # oldObjID, but this must be verified due to an observed anomaly.
@@ -89,6 +95,7 @@ def process(model, event):
             model.remove_stack_ref(event[3], event[2])
         if event[1] != "0":
             model.add_stack_ref(event[3], event[1])
+    
     else:
         #raise Exception("OPCODE {0} NOT RECOGNISED".format(event[0]))
         print "ERROR: OPCODE {0} NOT RECOGNISED".format(event[0])
@@ -140,6 +147,9 @@ def run(model, in_file=None, query_rate=1, collect_rate=1, update_rate=1000):
     log_events = parse_fn(in_file) if in_file else parse_file(sys.stdin)
     gc.enable()
     end = time.time()
+
+    print "\nFinished parsing"
+    print "Parse time: {}".format(format_time(end-start))
     
     print "\nExecuting with parameters:"
     if in_file:

@@ -6,11 +6,16 @@ import networkx as nx
 
 # Implementation of model using a DiGraph from the networkx library
 class GraphModel(model.Model):
-    def __init__(self, qry_fs, data_collectors=[]):
+    # Can't use ref_dealloc=True as of now, some bug in Erik's output
+    # makes it possible for an object to appear to lose all references,
+    # but still be kept track of and referenced again further on.
+    def __init__(self, qry_fs, data_collectors=[], ref_dealloc=False):
         self._g = nx.DiGraph()
         self.qry_fs = qry_fs
         self.data_collectors = [(open(fn, "w+"), func, to_str) \
                                 for fn, func, to_str in data_collectors]
+        #self.ref_dealloc = ref_dealloc
+        self.ref_dealloc = False
         self.results = {}
 
     def add_obj(self, obj_id, obj_type="(unknown)"):
@@ -104,6 +109,10 @@ class GraphModel(model.Model):
                             "referrer {0} and referee {1}" \
                             .format(referrer_id, referee_id))
         self._g.adj[referrer_id][referee_id]["stack"] -= 1
+        # If we remove objects when reference count reaches 0,
+        # not waiting for deallocation event
+        if self.ref_dealloc and self.in_total_refs(referee_id) == 0:
+            self.remove_obj(referee_id)
 
     def remove_heap_ref(self, referrer_id, referee_id):
         if not self._g.has_node(referrer_id):
@@ -125,6 +134,10 @@ class GraphModel(model.Model):
                             "referrer {0} and referee {1}" \
                             .format(referrer_id, referee_id))
         self._g.adj[referrer_id][referee_id]["heap"] -= 1
+        # If we remove objects when reference count reaches 0,
+        # not waiting for deallocation event
+        if self.ref_dealloc and self.in_total_refs(referee_id) == 0:
+            self.remove_obj(referee_id)
 
     def has_obj(self, obj_id):
         return self._g.has_node(obj_id)
