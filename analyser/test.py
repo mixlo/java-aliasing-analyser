@@ -8,6 +8,7 @@ import os
 import pandas as pd
 import json
 import datetime
+import argparse
 
 
 # Implemented by API:
@@ -130,15 +131,55 @@ def bltin_vs_custom(model):
     return b, c
     
 
-def main():
-    postfix = datetime.datetime.now().strftime("%Y%m%d%H%M%S")
-    in_file = None
-    data_dir = "../data"
+def rate_type(num):
+    x = int(num)
+    if x < 1:
+        raise argparse.ArgumentTypeError("Minimum rate is 1.")
+    return x
+
+
+def parse_args():
+    prog_desc = ("Execute the the Java aliasing analyser with specified "
+                 "parameters.")
+    lf_help = ("The logfile to be parsed.")
+    qr_help = ("The query rate. Default is 1.")
+    cr_help = ("The collect rate. Default is 1.")
+    ur_help = ("The update rate. Default is 1.")
+    np_help = ("Determines whether to plot the data after execution.")
     
-    if len(sys.argv) >= 2 and os.path.isfile(sys.argv[1]):
-        in_file = sys.argv[1]
-        base = os.path.splitext(os.path.basename(in_file))[0]
-        postfix = "{}_{}".format(base, postfix)
+    parser = argparse.ArgumentParser(prog="test", description=prog_desc)
+    parser.add_argument("logfile",
+                        help=lf_help)
+    parser.add_argument("-q", "--qrate",
+                        help=qr_help, type=rate_type, default=1)
+    parser.add_argument("-c", "--crate",
+                        help=cr_help, type=rate_type, default=1)
+    parser.add_argument("-u", "--urate",
+                        help=ur_help, type=rate_type, default=1000)
+    parser.add_argument("-n", "--noplot",
+                        help=np_help, action="store_true")
+    
+    args = parser.parse_args()
+    lf, qr, cr, ur, np = (args.logfile,
+                          args.qrate,
+                          args.crate,
+                          args.urate,
+                          args.noplot)
+
+    if not os.path.isfile(lf):
+        parser.error("'{}' is not a file.".format(lf))
+
+    return lf, qr, cr, ur, np
+
+
+def main():
+    lf, qr, cr, ur, np = parse_args()
+
+    in_file = lf
+    now = datetime.datetime.now().strftime("%Y%m%d%H%M%S")
+    base = os.path.splitext(os.path.basename(in_file))[0]
+    postfix = "{}_{}".format(now, base)
+    data_dir = "../data"
 
     os.mkdir("{}/results_{}".format(data_dir, postfix))
     
@@ -183,13 +224,14 @@ def main():
     
     query_results = analyser.run(gm,
                                  in_file=in_file,
-                                 query_rate=1,
-                                 collect_rate=1,
-                                 update_rate=1000)
+                                 query_rate=qr,
+                                 collect_rate=cr,
+                                 update_rate=ur)
     print_query_results(query_results, verbose=False, out_file=of)
-    
-    of.close()
-    plot(plot_funcs)
+
+    if not np:
+        of.close()
+        plot(plot_funcs)
 
 
 

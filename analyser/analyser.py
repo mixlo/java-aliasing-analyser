@@ -56,7 +56,9 @@ def process(model, event):
     elif event[0] == Opcodes.FSTORE:
         if not model.has_obj(event[5]):
             model.add_obj(event[5])
-        elif event[3] != "0":
+        # The event implies that there is a reference between caller and
+        # oldObjID, but this must be verified due to an observed anomaly.
+        if event[3] != "0" and model.has_heap_ref(event[5], event[3]):
             model.remove_heap_ref(event[5], event[3])
         if event[2] != "0":
             model.add_heap_ref(event[5], event[2])
@@ -81,7 +83,11 @@ def process(model, event):
             model.add_stack_ref(event[3], arg)
     
     elif event[0] == Opcodes.DEALLOC:
-        model.remove_obj(event[1])
+        # Objects for which the deallocation event occur seem to have
+        # remaining incoming references, therefore we force the removal of the
+        # object. Don't know what it depends on, but probably some
+        # inaccuracies in Erik's tool.
+        model.remove_obj(event[1], force=True)
     
     elif event[0] == Opcodes.MEXIT:
         for arg in event[5:]:

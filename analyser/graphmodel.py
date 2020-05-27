@@ -70,19 +70,20 @@ class GraphModel(model.Model):
             self._g.add_edge(referrer_id, referee_id, stack=0, heap=0)
         self._g.adj[referrer_id][referee_id]["heap"] += 1
 
-    def remove_obj(self, obj_id):
+    def remove_obj(self, obj_id, force=False):
         if not self._g.has_node(obj_id):
             raise Exception("remove_obj: "
                             "Object {0} doesn't exist" \
                             .format(obj_id))
-        if self.in_total_refs(obj_id) > 0:
-            raise Exception("remove_obj: "
-                            "Object {0} has incoming references" \
-                            .format(obj_id))
-        if self.out_total_refs(obj_id) > 0:
-            raise Exception("remove_obj: "
-                            "Object {0} has outgoing references" \
-                            .format(obj_id))
+        if not force:
+            if self.in_total_refs(obj_id) > 0:
+                raise Exception("remove_obj: "
+                                "Object {0} has incoming references" \
+                                .format(obj_id))
+            if self.out_total_refs(obj_id) > 0:
+                raise Exception("remove_obj: "
+                                "Object {0} has outgoing references" \
+                                .format(obj_id))
         #Save queries and remove object
         self.results[obj_id] = \
             {"type" : self._g.node[obj_id]["type"], 
@@ -109,8 +110,8 @@ class GraphModel(model.Model):
                             "referrer {0} and referee {1}" \
                             .format(referrer_id, referee_id))
         self._g.adj[referrer_id][referee_id]["stack"] -= 1
-        # If we remove objects when reference count reaches 0,
-        # not waiting for deallocation event
+        # This is run if we remove objects when reference count
+        # reaches 0, not waiting for deallocation event
         if self.ref_dealloc and self.in_total_refs(referee_id) == 0:
             self.remove_obj(referee_id)
 
@@ -134,8 +135,8 @@ class GraphModel(model.Model):
                             "referrer {0} and referee {1}" \
                             .format(referrer_id, referee_id))
         self._g.adj[referrer_id][referee_id]["heap"] -= 1
-        # If we remove objects when reference count reaches 0,
-        # not waiting for deallocation event
+        # This is run if we remove objects when reference count
+        # reaches 0, not waiting for deallocation event
         if self.ref_dealloc and self.in_total_refs(referee_id) == 0:
             self.remove_obj(referee_id)
 
