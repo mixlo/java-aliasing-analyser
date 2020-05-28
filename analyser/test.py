@@ -29,10 +29,19 @@ def str_to_int(s):
         return -1
 
 
-def print_query_results(results, verbose=False, out_file=sys.stdout):
+def print_query_results(results, exec_info, verbose=False, out_file=sys.stdout):
     stdout = sys.stdout
     sys.stdout = out_file
     res_len = len(results)
+
+    padding = len(str(max(exec_info["query_rate"], exec_info["collect_rate"])))
+    print "\nEXECUTION PARAMETERS\n"
+    if exec_info["in_file"]:
+        print "-- Input file   = {}".format(exec_info["in_file"])
+    print     "-- Query rate   = {: >PAD}".replace("PAD", str(padding)) \
+                                          .format(exec_info["query_rate"])
+    print     "-- Collect rate = {: >PAD}".replace("PAD", str(padding)) \
+                                          .format(exec_info["collect_rate"])
     
     print "\n", "-"*50
     print "\nRESULTS"
@@ -59,8 +68,9 @@ def print_query_results(results, verbose=False, out_file=sys.stdout):
         if verbose:
             print "-"*50
 
-    print "\nNumber of objects created during the execution:", res_len
-    print "Queries in accepting state:"
+    print "\nExecution time:", exec_info["exec_time"]
+    print "Number of objects created during the execution:", res_len
+    print "Queries in accepting state:\n"
     
     for qry in query_stats:
         print "{0: >X}/{1} ~= {2:6.2f}%\t{3}" \
@@ -179,13 +189,13 @@ def main():
     out_file = "{0}/query_results-{1}.txt".format(results_dir, postfix)
     of = open(out_file, "w")
     
-    query_results = analyser.run(gm,
-                                 in_file=in_file,
-                                 query_rate=qr,
-                                 collect_rate=cr,
-                                 update_rate=ur)
+    query_results, exec_info = analyser.run(gm,
+                                            in_file=in_file,
+                                            query_rate=qr,
+                                            collect_rate=cr,
+                                            update_rate=ur)
     
-    print_query_results(query_results, verbose=False, out_file=of)
+    print_query_results(query_results, exec_info, verbose=False, out_file=of)
     of.close()
 
     if not np:

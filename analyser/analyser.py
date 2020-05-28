@@ -172,13 +172,21 @@ def run(model, in_file=None, query_rate=1, collect_rate=1, update_rate=1000):
             collect_rate=collect_rate,
             update_rate=update_rate)
     end = time.time()
+    exec_time = format_time(end-start)
 
     print "\nFinished executing"
-    print "Execution time: {}".format(format_time(end-start))
+    print "Execution time: {}".format(exec_time)
 
     # Get results
     results = model.get_results()
     # Need to collect information about potentially remaining objects in model.
     get_remaining_results(model, results)
 
-    return results
+    exec_info = {
+        "in_file": in_file,
+        "query_rate": query_rate,
+        "collect_rate": collect_rate,
+        "exec_time": exec_time
+    }
+
+    return results, exec_info
