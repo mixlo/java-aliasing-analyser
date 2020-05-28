@@ -2,11 +2,9 @@
 import analyser
 import graphmodel
 from combinators import *
-import matplotlib.pyplot as plt
+import plot
 import sys
 import os
-import pandas as pd
-import json
 import datetime
 import argparse
 
@@ -76,43 +74,6 @@ def print_query_results(results, verbose=False, out_file=sys.stdout):
     sys.stdout = stdout
 
 
-def plot_min_max_avg(min_max_avg_fn):
-    df = pd.read_csv(min_max_avg_fn,
-                     names=["Progress", "Min", "Max", "Avg"])
-    fig = plt.figure(figsize=(12, 8))
-    ax = plt.gca()
-    df.plot(kind="line", x="Progress", y="Min", color="yellow", ax=ax)
-    df.plot(kind="line", x="Progress", y="Max", color="red", ax=ax)
-    df.plot(kind="line", x="Progress", y="Avg", color="blue", ax=ax)
-    plt.title("Min, max and average incoming references "
-              "to any given object during execution")
-    plt.xlabel("Execution (%)")
-    plt.ylabel("Incoming references")
-    plt.savefig(min_max_avg_fn.rpartition(".")[0] + ".png", dpi=1000)
-    plt.close(fig)
-
-
-def plot_bltin_vs_custom(bltin_vs_custom_fn):
-    df = pd.read_csv(bltin_vs_custom_fn,
-                     names=["Progress", "Built-in", "Custom"])
-    fig = plt.figure(figsize=(12, 8))
-    ax = plt.gca()
-    df.plot(kind="line", x="Progress", y="Built-in", color="blue", ax=ax)
-    df.plot(kind="line", x="Progress", y="Custom", color="red", ax=ax)
-    plt.title("Number of built-in and custom objects during the execution")
-    plt.xlabel("Execution (%)")
-    plt.ylabel("Number of objects")
-    plt.savefig(bltin_vs_custom_fn.rpartition(".")[0] + ".png", dpi=1000)
-    plt.close(fig)
-
-
-def plot(plot_funcs):
-    print "\nPlotting..."
-    for pf in plot_funcs:
-        pf()
-    print "Done"
-
-
 def min_max_avg(model):
     try:
         inc_refs = [model.in_total_refs(o) for o in model.get_obj_ids()]
@@ -178,10 +139,10 @@ def main():
     in_file = lf
     now = datetime.datetime.now().strftime("%Y%m%d%H%M%S")
     base = os.path.splitext(os.path.basename(in_file))[0]
-    postfix = "{}_{}".format(now, base)
-    data_dir = "../data"
+    postfix = "{}-{}".format(now, base)
+    results_dir = "../data/results-{}".format(postfix)
 
-    os.mkdir("{}/results_{}".format(data_dir, postfix))
+    os.mkdir(results_dir)
     
     #Create model and query factories
 
@@ -204,22 +165,18 @@ def main():
                        custom_obj,
                        custom_le4_inc_refs]
     
-    min_max_avg_fn = "{0}/results_{1}/min_max_avg_{1}.csv" \
-                     .format(data_dir, postfix)
-    bltin_vs_custom_fn = "{0}/results_{1}/bltin_vs_custom_{1}.csv" \
-                         .format(data_dir, postfix)
+    min_max_avg_fn = "{0}/min_max_avg-{1}.csv" \
+                     .format(results_dir, postfix)
+    bltin_vs_custom_fn = "{0}/bltin_vs_custom-{1}.csv" \
+                         .format(results_dir, postfix)
     
     data_collectors = [
         (min_max_avg_fn,  min_max_avg, lambda x: str(x).strip("()")),
         (bltin_vs_custom_fn, bltin_vs_custom, lambda x: str(x).strip("()"))]
 
-    plot_funcs = [
-        lambda: plot_min_max_avg(min_max_avg_fn),
-        lambda: plot_bltin_vs_custom(bltin_vs_custom_fn)]
-
     gm = graphmodel.GraphModel(query_factories, data_collectors)
     
-    out_file = "{0}/results_{1}/query_results_{1}.txt".format(data_dir, postfix)
+    out_file = "{0}/query_results-{1}.txt".format(results_dir, postfix)
     of = open(out_file, "w")
     
     query_results = analyser.run(gm,
@@ -227,11 +184,15 @@ def main():
                                  query_rate=qr,
                                  collect_rate=cr,
                                  update_rate=ur)
+    
     print_query_results(query_results, verbose=False, out_file=of)
+    of.close()
 
     if not np:
-        of.close()
-        plot(plot_funcs)
+        print "\nPlotting..."
+        plot.plot_min_max_avg(min_max_avg_fn)
+        plot.plot_bltin_vs_custom(bltin_vs_custom_fn)
+        print "Done"
 
 
 
