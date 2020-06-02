@@ -36,8 +36,8 @@ def print_query_results(results, exec_info, verbose=False, out_file=sys.stdout):
 
     padding = len(str(max(exec_info["query_rate"], exec_info["collect_rate"])))
     print "\nEXECUTION PARAMETERS\n"
-    if exec_info["in_file"]:
-        print "-- Input file   = {}".format(exec_info["in_file"])
+    if exec_info["log_fn"]:
+        print "-- Input file   = {}".format(exec_info["log_fn"])
     print     "-- Query rate   = {: >PAD}".replace("PAD", str(padding)) \
                                           .format(exec_info["query_rate"])
     print     "-- Collect rate = {: >PAD}".replace("PAD", str(padding)) \
@@ -146,9 +146,9 @@ def parse_args():
 def main():
     lf, qr, cr, ur, np = parse_args()
 
-    in_file = lf
+    log_fn = lf
     now = datetime.datetime.now().strftime("%Y%m%d%H%M%S")
-    base = os.path.splitext(os.path.basename(in_file))[0]
+    base = os.path.splitext(os.path.basename(log_fn))[0]
     postfix = "{}-{}".format(now, base)
     results_dir = "../data/results-{}".format(postfix)
 
@@ -190,7 +190,7 @@ def main():
     of = open(out_file, "w")
     
     query_results, exec_info = analyser.run(gm,
-                                            in_file=in_file,
+                                            log_fn=log_fn,
                                             query_rate=qr,
                                             collect_rate=cr,
                                             update_rate=ur)

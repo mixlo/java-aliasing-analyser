@@ -15,26 +15,6 @@ class Opcodes:
     VSTORE = "7"
 
 
-def parse():
-    lines = []
-    splitline = sys.stdin.readline().strip().split(" ")
-    while splitline != [""]:
-        lines.append(splitline)
-        splitline = sys.stdin.readline().strip().split(" ")
-    return lines
-
-
-def parse_file(log_file):
-    return [line.strip().split(" ") for line in log_file]
-
-
-def parse_fn(log_fn):
-    if not os.path.isfile(log_fn):
-        raise Exception("LOG FILE {} DOESN'T EXIST".format(log_fn))
-    with open(log_fn, "r") as log_file:
-        return parse_file(log_file)
-
-
 def process(model, event):
     if event[0] == Opcodes.ALLOC:
         if not model.has_obj(event[1]):
@@ -105,15 +85,17 @@ def process(model, event):
     else:
         #raise Exception("OPCODE {0} NOT RECOGNISED".format(event[0]))
         print "ERROR: OPCODE {0} NOT RECOGNISED".format(event[0])
-        
 
-def execute(model, log_events, query_rate=1, collect_rate=1, update_rate=1000):
-    for i, event in enumerate(log_events):
+
+def execute(model, log_lines, query_rate, collect_rate, update_rate):
+    for i, line in enumerate(log_lines):
+        event = line.strip().split(" ")
+        
         if i % update_rate == 0:
             print "Processing line", i
             
         if i % collect_rate == 0:
-            model.collect_data(i / float(len(log_events)))
+            model.collect_data(i / float(len(log_lines)))
             
         process(model, event)
         
@@ -142,24 +124,27 @@ def format_time(seconds):
     m, s = divmod(seconds, 60)
     h, m = divmod(m, 60)
     return "{0:02d}:{1:02d}:{2:02d}".format(h, m, s)
-    
 
-def run(model, in_file=None, query_rate=1, collect_rate=1, update_rate=1000):
-    # Parse the events
-    print "Parsing input..."
 
-    start = time.time()
-    gc.disable()
-    log_events = parse_fn(in_file) if in_file else parse_file(sys.stdin)
-    gc.enable()
-    end = time.time()
+def read_file(log_file):
+    return log_file.readlines()
 
-    print "\nFinished parsing"
-    print "Parse time: {}".format(format_time(end-start))
+
+def read_fn(log_fn):
+    if not os.path.isfile(log_fn):
+        raise Exception("LOG FILE {} DOESN'T EXIST".format(log_fn))
+    with open(log_fn, "r") as log_file:
+        return read_file(log_file)
+
+
+def run(model, log_fn=None, query_rate=1, collect_rate=1, update_rate=1000):
+    print "Reading logs..."
+    log_lines = read_file(sys.stdin) if log_fn is None else read_fn(log_fn)
+    print "Done"
     
     print "\nExecuting with parameters:"
-    if in_file:
-        print "-- in_file = {}".format(in_file)
+    if log_fn:
+        print "-- log_fn = {}".format(log_fn)
     print "-- query_rate = {}".format(query_rate)
     print "-- collect_rate = {}".format(collect_rate)
     print "-- update_rate = {}".format(update_rate)
@@ -167,7 +152,7 @@ def run(model, in_file=None, query_rate=1, collect_rate=1, update_rate=1000):
 
     start = time.time()
     execute(model,
-            log_events,
+            log_lines,
             query_rate=query_rate,
             collect_rate=collect_rate,
             update_rate=update_rate)
@@ -183,7 +168,7 @@ def run(model, in_file=None, query_rate=1, collect_rate=1, update_rate=1000):
     get_remaining_results(model, results)
 
     exec_info = {
-        "in_file": in_file,
+        "log_fn": log_fn,
         "query_rate": query_rate,
         "collect_rate": collect_rate,
         "exec_time": exec_time
