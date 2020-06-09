@@ -181,7 +181,7 @@ def main():
                          .format(results_dir, postfix)
     
     data_collectors = [
-        (min_max_avg_fn,  min_max_avg, lambda x: str(x).strip("()")),
+        (min_max_avg_fn,     min_max_avg,     lambda x: str(x).strip("()")),
         (bltin_vs_custom_fn, bltin_vs_custom, lambda x: str(x).strip("()"))]
 
     gm = graphmodel.GraphModel(query_factories, data_collectors)

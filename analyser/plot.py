@@ -17,7 +17,7 @@ def plot_min_max_avg(min_max_avg_fn):
               "to any given object during execution")
     plt.xlabel("Execution (%)")
     plt.ylabel("Incoming references")
-    plt.savefig(min_max_avg_fn.rpartition(".")[0] + ".png", dpi=1000)
+    plt.savefig(min_max_avg_fn.rpartition(".")[0] + ".png", dpi=300)
     plt.close(fig)
 
 
@@ -31,7 +31,7 @@ def plot_bltin_vs_custom(bltin_vs_custom_fn):
     plt.title("Number of built-in and custom objects during the execution")
     plt.xlabel("Execution (%)")
     plt.ylabel("Number of objects")
-    plt.savefig(bltin_vs_custom_fn.rpartition(".")[0] + ".png", dpi=1000)
+    plt.savefig(bltin_vs_custom_fn.rpartition(".")[0] + ".png", dpi=300)
     plt.close(fig)
 
 

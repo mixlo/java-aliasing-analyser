@@ -55,10 +55,11 @@ class Model(object):
     value.
     """
 
-    def __init__(self, qry_fs):
+    def __init__(self, qry_fs, data_collectors):
         """
         TYPE: lambda list -> void
-        Initialise the model with the provided list of query factories.
+        Initialise the model with the provided list of query 
+        factories, and data collectors.
         """
         raise NotImplementedError()
 
@@ -173,6 +174,7 @@ class Model(object):
         their respectively assigned files. The provided argument 
         signifies the progress percentage of the execution.
         """
+        raise NotImplementedError()
 
     def get_results(self):
         """
